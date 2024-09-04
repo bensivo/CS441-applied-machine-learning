@@ -1,11 +1,13 @@
 # Naive Bayes
+A simple implementation of a Naive Bayes Binary Classifier, implemented for CS441 in UIUC's MCS program.
+
 
 ## 1. Installation
 ```
 python3 -m venv ./venv
 source ./venv/bin/activate
 
-pip install pandas numpy seaborn matplotlib scikit-learn
+pip install pandas numpy 
 ```
 
 ## 2. Download Dataset
