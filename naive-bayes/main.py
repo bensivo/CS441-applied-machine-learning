@@ -3,34 +3,20 @@ import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 
-# Read csv
+from operations.split_df_train_eval import split_df_train_eval
+from operations.split_df_feature_label import split_df_feature_label
+from operations.cc_mean import cc_mean
+from operations.cc_stdev import cc_stdev
+from operations.log_prior import log_prior
+from operations.log_prob import log_prob
+
 df = pd.read_csv('diabetes.csv')
 
-# Split the dataset
-np_random = np.random.RandomState(seed=12345)
-rand_unifs = np_random.uniform(low=0, high=1,size=df.shape[0]) # Random numbers between 0 and 1
-division_thresh = np.percentile(rand_unifs, 80) # Calculate the threshold that puts 80% of the samples below, and 20% above 
-train_indicator = rand_unifs < division_thresh  # boolean array, whether this sample is in the training set
-eval_indicator = rand_unifs >= division_thresh  # boolean array, whether this sample is in the evaluation set
-
-
-# Create DF's for the training and evaluation datasets
-train_df = df[train_indicator].reset_index(drop=True)
-eval_df = df[eval_indicator].reset_index(drop=True)
-    # .reset_index(drop=True) re-initializes the default numerical indexes used to access elements in this df. Otherwise, it keesp teh indexes from the original
-
-# Split the train df into input-features (everythign but 'Outcome') and labels ('Outcome')
-train_features = train_df.loc[:, train_df.columns != 'Outcome'].values # Split the training df into 2 np arrays, one for the input features, and one for the class labels
-train_labels = train_df.loc[:, 'Outcome'].values
-    # .loc[<rows> , <cols>] is pd's way of making slices from a df
-    # .values converts the results to a np array
-
-# Split the eval df into input-features and labels (the 'Outcome' column
-eval_features = eval_df.loc[:, eval_df.columns != 'Outcome'].values
-eval_labels = eval_df.loc[:, 'Outcome'].values
-
-print('Data Split shape', train_features.shape, train_labels.shape, eval_features.shape, eval_labels.shape)
-
+# Split data into training and evaluation sets, features and labels
+train_df, eval_df = split_df_train_eval(df = df, train_percentage = 80, seed = 12345)
+train_features, train_labels = split_df_feature_label(df=train_df, label_col='Outcome')
+eval_features, eval_labels = split_df_feature_label(df=eval_df, label_col='Outcome')
+print(f'Split data into {train_features.shape[0]} training samples and {eval_features.shape[0]} evaluation samples')
 
 # Pre-process data
 # Some of the columns exhibit missing values. We will use a Naive Bayes Classifier later that will treat such missing values in a special way. 
@@ -40,101 +26,48 @@ eval_df_with_nans = eval_df.copy(deep=True)
 for col in ['BloodPressure', 'SkinThickness', 'BMI', 'Age']:
     train_df_with_nans[col] = train_df_with_nans[col].replace(0, np.nan)
     eval_df_with_nans[col] = eval_df_with_nans[col].replace(0, np.nan)
-train_features_with_nans = train_df_with_nans.loc[:, train_df_with_nans.columns != 'Outcome'].values
-eval_features_with_nans = eval_df_with_nans.loc[:, eval_df_with_nans.columns != 'Outcome'].values
+train_features = train_df_with_nans.loc[:, train_df_with_nans.columns != 'Outcome'].values
+eval_features = eval_df_with_nans.loc[:, eval_df_with_nans.columns != 'Outcome'].values
 
 
+# # Running the classifier step-by-step
+#
+# train_log_prior = log_prior(train_labels)
+# train_cc_mean = cc_mean(train_features, train_labels)
+# train_cc_stdev = cc_stdev(train_features, train_labels)
+# log_probs = log_prob(eval_features, train_cc_mean, train_cc_stdev, train_log_prior)
 
-def log_prior(train_labels):
-    """
-    Calculates our bayesian prior for training labels, log prob of y=0, and y=1
+# print('log(p(y)):', train_log_prior)
+# print('Conditional class means', train_cc_mean)
+# print('Conditional class stddevs', train_cc_stdev)
+# print('log probs:', log_probs)
 
-    Returns:
-        log_prior: np.array [log(p(y=0)), log(p(y=1))]
-    """
-    num_0 = np.count_nonzero(train_labels == 0)
-    num_1 = np.count_nonzero(train_labels == 1)
-
-    prob = np.zeros((2, 1))
-    prob[0] = num_0 / len(train_labels)
-    prob[1] = num_1 / len(train_labels)
-
-    log_prob = np.log(prob)
-    assert log_prob.shape == (2,1)
-    return log_prob
-
-log_prior_train_labels = log_prior(train_labels)
-print('log(p(y)):', log_prior_train_labels)
-
-
-def cc_mean_ignore_missing(train_features, train_labels):
-    """
-    Calculates the conditional class mean for each class/label combination, ignoring missing values
-
-    Params:
-        train_features: np.array [N, X] where N is the number of samples and X is the number of features
-        train_labels: np.array [N,] where N is the number of samples.
-
-    Returns:
-        np.array [X, Y] where X is the number of features and Y is the number of classes, and each value (x,y) is the mean of feature x given class y
-    """
-    num_samples, num_features = train_features.shape
-    num_labels = 2
-    cc_mean = np.zeros((num_features, num_labels))
-
-    for label_ind in range(0, num_labels):
-        features = train_features[train_labels == label_ind] # NOTE: here, we're assuming the label indexes are the same as their values.
-        for feature_ind in range(0, num_features):
-            feature_mean_for_label = np.mean(features[:, feature_ind]) # NOTE: the np.mean() function ignores np.NaN values, which we filled in earlier
-            cc_mean[feature_ind, label_ind] = feature_mean_for_label
-
-    return cc_mean
-
-cc_mean_train = cc_mean_ignore_missing(train_features, train_labels)
-print('Conditional class means', cc_mean_train)
-
-
-def cc_stddev_ignore_missing(train_features, train_labels):
-    """
-    Calculates the conditional class stddev for each class/label combination, ignoring missing values
-
-    Params:
-        train_features: np.array [N, X] where N is the number of samples and X is the number of features
-        train_labels: np.array [N,] where N is the number of samples.
-
-    Returns:
-        np.array [X, Y] where X is the number of features and Y is the number of classes, and each value (x,y) is the stddev of feature x given class y
-    """
-    num_samples, num_features = train_features.shape
-    num_labels = 2
-    cc_std = np.zeros((num_features, num_labels))
-
-    for label_ind in range(0, num_labels):
-        features = train_features[train_labels == label_ind] # NOTE: here, we're assuming the label indexes are the same as their values.
-        for feature_ind in range(0, num_features):
-            feature_mean_for_label = np.std(features[:, feature_ind]) # NOTE: the np.mean() function ignores np.NaN values, which we filled in earlier
-            cc_std[feature_ind, label_ind] = feature_mean_for_label
-
-    return cc_std
-
-cc_stddev_train = cc_stddev_ignore_missing(train_features, train_labels)
-print('Conditional class stddevs', cc_stddev_train)
-
-
-def log_prob(train_features, mu_y, sigma_y, log_py):
-    """
-    Calculate p(y|x), for each sample in train_features, using bayesian priors
-
-    Params:
-        train_features: np.array [N, X] where N is the number of samples and X is the number of features
-        mu_y: Gaussian constant for mean of the PDF used on Y
-        sigma_y: Gaussian constant for the spread of the PDF used on Y
-        log_py: Prior. Log probabilities for each class in Y
-
-    Returns:
-        log_prob: np.array [N, Y], where log_prob[n,y] is roughly p(y|x), using naive bayes
-    """
-    num_samples, num_features = train_features.shape
-    output = np.zeros((num_samples, 2))
+class NBClassifier():
+    def __init__(self, train_features, train_labels):
+        self.train_features = train_features
+        self.train_labels = train_labels
+        self.log_py = log_prior(train_labels)
+        self.mu_y = self.get_cc_means()
+        self.sigma_y = self.get_cc_std()
+        
+    def get_cc_means(self):
+        mu_y = cc_mean(self.train_features, self.train_labels)
+        return mu_y
     
-    return output
+    def get_cc_std(self):
+        sigma_y = cc_stdev(self.train_features, self.train_labels)
+        return sigma_y
+    
+    def predict(self, features):
+        log_p_x_y = log_prob(features, self.mu_y, self.sigma_y, self.log_py)
+        return log_p_x_y.argmax(axis=1)
+
+diabetes_classifier = NBClassifier(train_features, train_labels)
+train_pred = diabetes_classifier.predict(train_features)
+eval_pred = diabetes_classifier.predict(eval_features)
+
+train_acc = (train_pred==train_labels).mean()
+eval_acc = (eval_pred==eval_labels).mean()
+print(f'The training data accuracy of your trained model is {train_acc}')
+print(f'The evaluation data accuracy of your trained model is {eval_acc}')
+
