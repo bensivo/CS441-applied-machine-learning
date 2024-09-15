@@ -3,7 +3,7 @@ import numpy as np
 
 def get_non_empty_bounds(image):
     """
-    Given an image, determine the bounding-box that removes all empty pixels
+    Given an image, determine the bounding-box that includes all non-empty pixels.
 
     Params:
         image: np.array [H,W], image data as a numpy array
@@ -24,10 +24,10 @@ def get_non_empty_bounds(image):
 
     return (min_row, max_row, min_col, max_col)
 
-def crop_non_empty_center(image, crop_height, crop_width):
+def im_crop(image):
     """
-    Given an image and a desired crop size, crop the image around the center
-    of the non-empty pixels.
+    Given an image (as a np array), crop it so that all empty rows and cols at the edges are removed.
+    Like str.strip(), but for a numpy arr.
 
     Params:
         image: np.array [H,W], image data as a numpy array
@@ -40,29 +40,8 @@ def crop_non_empty_center(image, crop_height, crop_width):
     bounds = get_non_empty_bounds(image)
     min_row, max_row, min_col, max_col = bounds
 
-    # Calculate the center of the non-empty pixels
-    non_empty_row_center = ( min_row + max_row ) // 2
-    non_empty_col_center = ( min_col + max_col ) // 2
-
-    # Use np.roll to move the center of the non-empty pixels to the center of the image
-    im_center_row = int(image.shape[0] / 2)
-    im_center_col = int(image.shape[1] / 2)
-    row_shift = im_center_row - non_empty_row_center
-    col_shift = im_center_col - non_empty_col_center
-    image = np.roll(image, row_shift, axis=0)
-    image = np.roll(image, col_shift, axis=1)
-
-    # Crop the image around the center, using the desired crop size
-    crop_min_row = im_center_row - (crop_height // 2)
-    crop_max_row = crop_min_row + crop_height
-    crop_min_col = im_center_col - (crop_width // 2)
-    crop_max_col = crop_min_col + crop_width
-
-    cropped_image = image[crop_min_row:crop_max_row, crop_min_col:crop_max_col]
-
+    cropped_image = image[min_row:max_row+1, min_col:max_col+1]
     return cropped_image
-
-
 
 if __name__ == '__main__':
     original = np.array([
@@ -75,10 +54,14 @@ if __name__ == '__main__':
         [0,0,0,0,0,0,0,0,],
     ])
 
-    cropped = crop_non_empty_center(original, 7, 5)
+    cropped = crop_non_empty(original)
 
-    plt.imshow(original, cmap='gray')
-    plt.show()
-    plt.imshow(cropped, cmap='gray')
-    plt.show()
+    expected = np.array([
+        [1,1,0,],
+        [1,0,0,],
+        [1,0,1,],
+    ])
+
+    assert np.array_equal(cropped, expected)
+    print('Passed')
 

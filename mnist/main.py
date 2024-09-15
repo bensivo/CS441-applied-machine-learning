@@ -1,34 +1,56 @@
-import matplotlib.pyplot as plt
-
 import numpy as np
-from skimage.transform import resize
 from sklearn.naive_bayes import GaussianNB, BernoulliNB
-import pandas as pd
-from sklearn.ensemble import RandomForestClassifier
-import os
 
 from operations.load_mnist import load_mnist
-from operations.im_to_binary import im_to_binary
-from operations.crop import crop_non_empty_center
+from operations.im_preprocess import im_preprocess
 
-
+print('Loading MNIST data')
 training_data_raw, training_labels_raw, eval_data_raw, eval_labels_raw = load_mnist()
  
-print(training_data_raw.shape)
-print(training_labels_raw.shape)
-print(eval_data_raw.shape)
-print(eval_labels_raw.shape)
- 
+# Run pre-processing on all images:
+#   - Crop the image to remove empty rows and columns
+#   - Resize the image to 20x20
+#   - Convert the image to binary, using a threshold value
+print('Pre-processing images')
+width = 20
+height = 20
+binary_threshold = 50
 
-im = training_data_raw[2]
-plt.imshow(im, cmap='gray')
-plt.show()
+training_data_processed = np.zeros((training_data_raw.shape[0], height, width))
+eval_data_processed = np.zeros((eval_data_raw.shape[0], height, width))
 
-im_binary = im_to_binary(im, threshold=10)
-plt.imshow(im_binary, cmap='gray')
-plt.show()
+for i in range(training_data_raw.shape[0]):
+    image = training_data_raw[i]
+    training_data_processed[i] = im_preprocess(
+            image, 
+            height=height, 
+            width=width, 
+            threshold=binary_threshold
+    )
 
-im_cropped = crop_non_empty_center(im, crop_height=19, crop_width=19)
-plt.imshow(im_cropped, cmap='gray')
-plt.show()
+for i in range(eval_data_raw.shape[0]):
+    image = eval_data_raw[i]
+    eval_data_processed[i] = im_preprocess(
+            image, 
+            height=height, 
+            width=width, 
+            threshold=binary_threshold
+    )
 
+# Flatten the processed images into 1-dimensional feature vectors
+print('Building feature vectors')
+training_data_flattened = training_data_processed.reshape(training_data_processed.shape[0], -1)
+eval_data_flattened = eval_data_processed.reshape(eval_data_processed.shape[0], -1)
+
+# Fit a Naive Bayes classifier on the training data
+print('Fitting Naive Bayes classifier')
+classifier = GaussianNB()
+classifier.fit(training_data_flattened, training_labels_raw)
+
+# Predict the labels of the evaluation data
+print('Making predictions')
+predictions = classifier.predict(eval_data_flattened)
+
+# Calculate accuracy
+accuracy = np.mean(predictions == eval_labels_raw)
+print(f'Accuracy: {accuracy}')
