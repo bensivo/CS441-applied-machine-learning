@@ -1,12 +1,17 @@
 default:
     @just -l
 
+venv:
+    rm -rf ./venv
+    python3 -m venv ./venv
+
+install:
+    ./venv/bin/pip install numpy matplotlib scikit-image scikit-learn pandas torchvision
+
 download:
     ./venv/bin/python download.py
+
 run:
     ./venv/bin/python main.py
 
-install:
-    source ./venv/bin/activate 
-    pip install numpy matplotlib scikit-image scikit-learn pandas torchvision
 
